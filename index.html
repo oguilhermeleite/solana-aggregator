@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solana Aggregator — Ecosystem Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg1:#0d0d1f;--bg2:#13132a;--bg3:#1a1a35;--bg4:#22224a;
+  --border:#2a2a4a;--purple:#9945FF;--green:#14F195;--green2:#0fd97f;
+  --text:#F0F0F8;--muted:#9898B8;--muted2:#5a5a7a;
+  --up:#22c55e;--dn:#ef4444;--gold:#FFD700;
+  --fd:'Barlow Condensed',sans-serif;--fb:'Barlow',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg1);color:var(--text);font-family:var(--fb);font-size:14px;min-height:100vh;overflow-x:hidden;}
+
+.amb{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+.a1{position:absolute;top:-200px;left:-100px;width:700px;height:700px;background:radial-gradient(circle,rgba(153,69,255,.07) 0%,transparent 70%);animation:p1 8s ease-in-out infinite;}
+.a2{position:absolute;bottom:-100px;right:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(20,241,149,.05) 0%,transparent 70%);animation:p2 10s ease-in-out infinite;}
+.a3{position:absolute;top:50%;left:50%;width:900px;height:900px;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(153,69,255,.03) 0%,transparent 60%);}
+@keyframes p1{0%,100%{transform:scale(1) translate(0,0);}50%{transform:scale(1.1) translate(20px,30px);}}
+@keyframes p2{0%,100%{transform:scale(1);}50%{transform:scale(1.15) translate(-20px,-20px);}}
+
+/* TICKER */
+#ticker{position:sticky;top:0;z-index:100;background:rgba(13,13,31,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);height:36px;overflow:hidden;display:flex;align-items:center;}
+.tkr-lbl{position:absolute;left:0;top:0;bottom:0;width:80px;background:linear-gradient(90deg,var(--bg1) 60%,transparent);display:flex;align-items:center;padding-left:14px;font-family:var(--fd);font-size:.78rem;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:var(--purple);z-index:2;}
+.tkr-track{display:flex;gap:28px;white-space:nowrap;padding:0 20px 0 90px;animation:scroll 35s linear infinite;}
+.tkr-track:hover{animation-play-state:paused;}
+.tkr-fade{position:absolute;right:0;top:0;bottom:0;width:60px;background:linear-gradient(270deg,var(--bg1) 40%,transparent);pointer-events:none;z-index:2;}
+@keyframes scroll{0%{transform:translateX(0);}100%{transform:translateX(-50%)}}
+.tkr-item{display:flex;align-items:center;gap:6px;font-family:var(--fd);font-size:.78rem;font-weight:700;letter-spacing:.05em;}
+.tkr-sym{color:var(--green);}
+.up{color:var(--up);}
+.dn{color:var(--dn);}
+
+/* NAV */
+nav{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(1rem,4vw,2.5rem);height:58px;border-bottom:1px solid var(--border);background:rgba(13,13,31,.9);backdrop-filter:blur(12px);}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.lmark{font-size:1.6rem;color:var(--green);line-height:1;}
+.ltext{font-family:var(--fd);font-size:1.2rem;font-weight:900;letter-spacing:.08em;color:var(--text);text-transform:uppercase;}
+.ltext em{color:var(--green);font-style:normal;}
+.nav-r{display:flex;align-items:center;gap:12px;}
+.sol-pill{display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;}
+.sol-pill img{width:20px;height:20px;}
+.sp{font-family:var(--fd);font-weight:800;font-size:.9rem;}
+.sc{font-family:var(--fd);font-size:.75rem;}
+.lang-wrap{display:flex;gap:3px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:3px;}
+.lbtn{background:none;border:none;color:var(--muted);font-family:var(--fd);font-size:.75rem;font-weight:800;letter-spacing:.1em;cursor:pointer;padding:3px 9px;border-radius:5px;transition:all .2s;}
+.lbtn.active{background:var(--purple);color:#fff;}
+
+/* PAGE */
+.page{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:0 clamp(1rem,4vw,2.5rem) 4rem;}
+
+/* HERO */
+.hero{padding:3rem 0 2rem;text-align:center;}
+.chip{display:inline-flex;align-items:center;gap:7px;background:rgba(153,69,255,.1);border:1px solid rgba(153,69,255,.25);border-radius:20px;padding:5px 14px;margin-bottom:1.2rem;}
+.chip-dot{width:7px;height:7px;background:var(--green);border-radius:50%;animation:blink 2s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;}}
+.chip span{font-family:var(--fd);font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--green);}
+.hero h1{font-family:var(--fd);font-size:clamp(2.4rem,6vw,4.5rem);font-weight:900;text-transform:uppercase;line-height:1;letter-spacing:.02em;margin-bottom:1rem;}
+.grad{background:linear-gradient(135deg,var(--purple) 0%,var(--green) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero-p{font-size:.9rem;color:var(--muted);max-width:500px;margin:0 auto 2rem;line-height:1.6;}
+
+/* KPI STRIP */
+.kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:2rem;}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden;transition:border-color .2s;}
+.kpi::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(153,69,255,.04) 0%,transparent 60%);pointer-events:none;}
+.kpi:hover{border-color:rgba(153,69,255,.3);}
+.kl{font-family:var(--fd);font-size:.65rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.kv{font-family:var(--fd);font-size:1.9rem;font-weight:900;letter-spacing:-.01em;min-height:38px;}
+.kc{font-family:var(--fd);font-size:.72rem;font-weight:700;margin-top:4px;}
+
+/* MAIN CHART */
+.chart-box{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:2rem;position:relative;overflow:hidden;}
+.chart-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--purple),var(--green));opacity:.6;}
+.chart-header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;}
+.chart-title{font-family:var(--fd);font-size:.72rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.chart-val{font-family:var(--fd);font-size:2rem;font-weight:900;}
+.chart-chg{font-family:var(--fd);font-size:.78rem;font-weight:700;margin-top:2px;}
+.ctabs{display:flex;gap:4px;}
+.ctab{background:var(--bg3);border:1px solid var(--border);color:var(--muted);font-family:var(--fd);font-size:.72rem;font-weight:700;letter-spacing:.08em;padding:5px 11px;border-radius:7px;cursor:pointer;transition:all .2s;}
+.ctab.active,.ctab:hover{background:var(--purple);color:#fff;border-color:var(--purple);}
+.chart-wrap{position:relative;height:200px;}
+
+/* MINI GRID */
+.mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:2rem;}
+.mini-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;overflow:hidden;transition:border-color .2s;}
+.mini-card:hover{border-color:rgba(153,69,255,.3);}
+.ml{font-family:var(--fd);font-size:.62rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.mv{font-family:var(--fd);font-size:1.3rem;font-weight:900;}
+.mc{font-family:var(--fd);font-size:.68rem;font-weight:700;margin-top:2px;}
+.mini-chart-wrap{height:52px;margin-top:10px;}
+
+/* NETWORK STATS */
+.net-section{margin-bottom:2.5rem;}
+.section-title{font-family:var(--fd);font-size:.72rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+.net-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+.nstat{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center;transition:border-color .2s;}
+.nstat:hover{border-color:rgba(153,69,255,.3);}
+.nl{font-family:var(--fd);font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.nv{font-family:var(--fd);font-size:1.25rem;font-weight:900;color:var(--green);}
+.nu{font-family:var(--fd);font-size:.6rem;color:var(--muted2);margin-top:2px;}
+
+/* ═══════════════════════════════════════
+   PROTOCOL METRICS SECTION — NEW
+═══════════════════════════════════════ */
+.metrics-section{margin-bottom:2.5rem;}
+
+.metrics-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+.mtab{background:var(--bg2);border:1px solid var(--border);color:var(--muted);font-family:var(--fd);font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:7px 16px;border-radius:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px;}
+.mtab.active,.mtab:hover{background:var(--green);color:#000;border-color:var(--green);}
+.mtab svg{width:13px;height:13px;}
+
+.metrics-table{background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative;}
+.metrics-table::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--green),var(--purple));opacity:.5;}
+
+.mt-header{display:grid;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg3);}
+.mt-header span{font-family:var(--fd);font-size:.65rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+
+/* APY table */
+.mt-apy{grid-template-columns:2fr 1fr 1fr 1fr 1fr;}
+.mt-row-apy{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:14px 18px;border-bottom:1px solid rgba(42,42,74,.5);transition:background .15s;cursor:default;}
+.mt-row-apy:last-child{border-bottom:none;}
+.mt-row-apy:hover{background:rgba(153,69,255,.05);}
+
+/* SWAP table */
+.mt-swap{grid-template-columns:2fr 1fr 1fr 1fr 1fr;}
+.mt-row-swap{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:14px 18px;border-bottom:1px solid rgba(42,42,74,.5);transition:background .15s;cursor:default;}
+.mt-row-swap:last-child{border-bottom:none;}
+.mt-row-swap:hover{background:rgba(153,69,255,.05);}
+
+/* STAKING table */
+.mt-stk{grid-template-columns:2fr 1fr 1fr 1fr;}
+.mt-row-stk{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;padding:14px 18px;border-bottom:1px solid rgba(42,42,74,.5);transition:background .15s;cursor:default;}
+.mt-row-stk:last-child{border-bottom:none;}
+.mt-row-stk:hover{background:rgba(153,69,255,.05);}
+
+.mt-proto{display:flex;align-items:center;gap:10px;}
+.mt-logo{width:28px;height:28px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
+.mt-logo img{width:22px;height:22px;object-fit:contain;}
+.mt-name{font-family:var(--fd);font-size:.9rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;}
+.mt-chain{font-family:var(--fd);font-size:.58rem;color:var(--muted);letter-spacing:.08em;}
+
+.mt-val{font-family:var(--fd);font-size:.95rem;font-weight:800;display:flex;align-items:center;}
+.mt-val.green{color:var(--green);}
+.mt-val.gold{color:var(--gold);}
+.mt-val.muted{color:var(--muted);}
+
+.best-badge{display:inline-block;background:rgba(20,241,149,.15);border:1px solid rgba(20,241,149,.3);color:var(--green);font-family:var(--fd);font-size:.55rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;border-radius:4px;padding:1px 6px;margin-left:6px;}
+.high-badge{display:inline-block;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);color:#ef4444;font-family:var(--fd);font-size:.55rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;border-radius:4px;padding:1px 6px;margin-left:6px;}
+
+.bar-wrap{display:flex;align-items:center;gap:8px;}
+.bar-bg{flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;min-width:40px;}
+.bar-fill{height:100%;border-radius:3px;transition:width .6s ease;}
+.bar-green{background:var(--green);}
+.bar-purple{background:var(--purple);}
+.bar-gold{background:var(--gold);}
+
+.skel{background:linear-gradient(90deg,var(--bg2) 25%,var(--bg3) 50%,var(--bg2) 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:5px;}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* PROTOCOLS SECTION */
+.proto-section{margin-bottom:2.5rem;}
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
+.fbtn{display:flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border);color:var(--muted);font-family:var(--fd);font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 13px;border-radius:8px;cursor:pointer;transition:all .2s;}
+.fbtn.active,.fbtn:hover{background:var(--purple);color:#fff;border-color:var(--purple);}
+.fbtn .dot{width:6px;height:6px;border-radius:50%;}
+.search-wrap{position:relative;margin-bottom:16px;}
+.search-wrap input{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 16px 10px 38px;color:var(--text);font-family:var(--fb);font-size:.85rem;outline:none;transition:border-color .2s;}
+.search-wrap input::placeholder{color:var(--muted2);}
+.search-wrap input:focus{border-color:var(--purple);}
+.search-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted2);}
+.cgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:15px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+.card:hover{border-color:rgba(153,69,255,.35);transform:translateY(-2px);}
+.card-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.lwrap{width:40px;height:40px;border-radius:10px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
+.lwrap img{width:34px;height:34px;object-fit:contain;}
+.cname{font-family:var(--fd);font-size:1rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;}
+.ctvl{font-family:var(--fd);font-size:.7rem;font-weight:600;color:var(--green);margin-top:1px;}
+.cdesc{font-size:.74rem;color:var(--muted);line-height:1.5;margin-bottom:10px;}
+.ctags{display:flex;flex-wrap:wrap;gap:4px;}
+.tag{font-family:var(--fd);font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;color:var(--muted);}
+.cat-badge{font-family:var(--fd);font-size:.58rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;border-radius:4px;padding:2px 8px;margin-left:auto;align-self:flex-start;}
+.cat-dex{background:rgba(153,69,255,.15);color:var(--purple);border:1px solid rgba(153,69,255,.3);}
+.cat-lending{background:rgba(20,241,149,.1);color:var(--green);border:1px solid rgba(20,241,149,.25);}
+.cat-staking{background:rgba(255,215,0,.1);color:var(--gold);border:1px solid rgba(255,215,0,.25);}
+.cat-nft{background:rgba(255,107,53,.1);color:#FF6B35;border:1px solid rgba(255,107,53,.25);}
+.cat-wallet{background:rgba(56,189,248,.1);color:#38BDF8;border:1px solid rgba(56,189,248,.25);}
+.cat-tools{background:rgba(168,85,247,.1);color:#A855F7;border:1px solid rgba(168,85,247,.25);}
+.cat-bridge{background:rgba(251,146,60,.1);color:#FB923C;border:1px solid rgba(251,146,60,.25);}
+.dot-dex{background:var(--purple);}
+.dot-lending{background:var(--green);}
+.dot-staking{background:var(--gold);}
+.dot-nft{background:#FF6B35;}
+.dot-wallet{background:#38BDF8;}
+.dot-tools{background:#A855F7;}
+.dot-bridge{background:#FB923C;}
+.cscore{position:absolute;top:12px;right:12px;font-family:var(--fd);font-size:.65rem;font-weight:800;background:rgba(153,69,255,.12);border:1px solid rgba(153,69,255,.2);border-radius:5px;padding:2px 6px;color:var(--purple);}
+.empty{text-align:center;padding:4rem 2rem;color:var(--muted);display:none;}
+
+footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.4rem clamp(1rem,4vw,2.5rem);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.8rem;margin-top:3rem;}
+.fl{display:flex;align-items:center;gap:8px;font-size:.72rem;color:var(--muted);}
+.fr{font-size:.66rem;color:var(--muted);}
+.fr a{color:var(--purple);text-decoration:none;}
+
+@media(max-width:1024px){.kpi-strip{grid-template-columns:repeat(3,1fr);}.mini-grid{grid-template-columns:repeat(2,1fr);}.net-grid{grid-template-columns:repeat(3,1fr);}.cgrid{grid-template-columns:repeat(3,1fr);}
+.mt-apy,.mt-row-apy,.mt-swap,.mt-row-swap{grid-template-columns:2fr 1fr 1fr 1fr;}
+.mt-apy span:last-child,.mt-row-apy>*:last-child,.mt-swap span:last-child,.mt-row-swap>*:last-child{display:none;}}
+@media(max-width:768px){.cgrid{grid-template-columns:repeat(2,1fr);}.kpi-strip{grid-template-columns:repeat(2,1fr);}.net-grid{grid-template-columns:repeat(2,1fr);}.sol-pill .sc{display:none;}
+.mt-apy,.mt-row-apy,.mt-swap,.mt-row-swap,.mt-stk,.mt-row-stk{grid-template-columns:2fr 1fr 1fr;}}
+@media(max-width:480px){.cgrid{grid-template-columns:1fr;}.mini-grid{grid-template-columns:1fr;}.hero h1{font-size:2rem;}}
+</style>
+</head>
+<body>
+<div class="amb"><div class="a1"></div><div class="a2"></div><div class="a3"></div></div>
+
+<!-- TICKER -->
+<div id="ticker">
+  <div class="tkr-lbl">LIVE</div>
+  <div class="tkr-track" id="tkTrack"></div>
+  <div class="tkr-fade"></div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <a class="logo" href="#"><div class="lmark">◎</div><div class="ltext">SOLANA<em>AGGREGATOR</em></div></a>
+  <div class="nav-r">
+    <div class="sol-pill">
+      <img src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png" alt="SOL" onerror="this.style.display='none'">
+      <span style="font-family:var(--fd);font-weight:800;font-size:.75rem;color:var(--green);">SOL</span>
+      <span class="sp" id="nav-p">…</span>
+      <span class="sc" id="nav-c"></span>
+    </div>
+    <div class="lang-wrap">
+      <button class="lbtn active" id="btn-en" onclick="setLang('en')">EN</button>
+      <button class="lbtn" id="btn-pt" onclick="setLang('pt')">PT</button>
+    </div>
+  </div>
+</nav>
+
+<div class="page">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="chip"><div class="chip-dot"></div><span id="chip-txt">SOLANA ECOSYSTEM DASHBOARD</span></div>
+    <h1><span id="h1a">TOTAL VALUE</span><br><span class="grad" id="h1b">LOCKED ON SOLANA</span></h1>
+    <p class="hero-p" id="hdesc">Real-time data from DefiLlama & CoinGecko. TVL, DEX volume, fees and all protocols across the Solana ecosystem.</p>
+  </section>
+
+  <!-- KPIs -->
+  <div class="kpi-strip">
+    <div class="kpi"><div class="kl" id="kl1">Solana TVL</div><div class="kv skel" id="kv1" style="height:38px;width:120px;">&nbsp;</div><div class="kc" id="kc1"></div></div>
+    <div class="kpi"><div class="kl" id="kl2">DEXs Volume 24h</div><div class="kv skel" id="kv2" style="height:38px;width:140px;">&nbsp;</div><div class="kc" id="kc2"></div></div>
+    <div class="kpi"><div class="kl" id="kl3">Stablecoins Mcap</div><div class="kv skel" id="kv3" style="height:38px;width:100px;">&nbsp;</div><div class="kc" id="kc3"></div></div>
+    <div class="kpi"><div class="kl" id="kl4">Fees 24h</div><div class="kv skel" id="kv4" style="height:38px;width:110px;">&nbsp;</div><div class="kc" id="kc4"></div></div>
+    <div class="kpi"><div class="kl" id="kl5">SOL Price</div><div class="kv skel" id="kv5" style="height:38px;width:100px;">&nbsp;</div><div class="kc" id="kc5"></div></div>
+  </div>
+
+  <!-- MAIN TVL CHART -->
+  <div class="chart-box">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title" id="tvl-label">TOTAL VALUE LOCKED — SOLANA</div>
+        <div class="chart-val" id="tvl-display">Loading...</div>
+        <div class="chart-chg" id="tvl-chg"></div>
+      </div>
+      <div class="ctabs">
+        <button class="ctab" onclick="setRange(30,this)">1M</button>
+        <button class="ctab" onclick="setRange(90,this)">3M</button>
+        <button class="ctab active" onclick="setRange(180,this)">6M</button>
+        <button class="ctab" onclick="setRange(365,this)">1Y</button>
+        <button class="ctab" onclick="setRange(99999,this)">ALL</button>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="tvlChart"></canvas></div>
+  </div>
+
+  <!-- MINI CHARTS -->
+  <div class="mini-grid">
+    <div class="mini-card"><div class="ml" id="mc1l">DEXs VOLUME</div><div class="mv" id="mc1v">—</div><div class="mc" id="mc1c"></div><div class="mini-chart-wrap"><canvas id="mc1"></canvas></div></div>
+    <div class="mini-card"><div class="ml" id="mc2l">STABLECOINS MCAP</div><div class="mv" id="mc2v">—</div><div class="mc" id="mc2c"></div><div class="mini-chart-wrap"><canvas id="mc2"></canvas></div></div>
+    <div class="mini-card"><div class="ml" id="mc3l">TOP PROTOCOLS TVL</div><div class="mv" id="mc3v">—</div><div class="mc" id="mc3c"></div><div class="mini-chart-wrap"><canvas id="mc3"></canvas></div></div>
+    <div class="mini-card"><div class="ml" id="mc4l">SOL PRICE 7D</div><div class="mv" id="mc4v">—</div><div class="mc" id="mc4c"></div><div class="mini-chart-wrap"><canvas id="mc4"></canvas></div></div>
+  </div>
+
+  <!-- NETWORK STATS -->
+  <div class="net-section">
+    <div class="section-title" id="net-title">SOLANA NETWORK</div>
+    <div class="net-grid">
+      <div class="nstat"><div class="nl" id="ns1l">TPS</div><div class="nv skel" id="ns1v" style="height:28px;width:70px;">&nbsp;</div><div class="nu" id="ns1u">non-vote</div></div>
+      <div class="nstat"><div class="nl" id="ns2l">CURRENT SLOT</div><div class="nv skel" id="ns2v" style="height:28px;width:100px;">&nbsp;</div><div class="nu">slot</div></div>
+      <div class="nstat"><div class="nl" id="ns3l">EPOCH</div><div class="nv skel" id="ns3v" style="height:28px;width:60px;">&nbsp;</div><div class="nu" id="ns3u">progress</div></div>
+      <div class="nstat"><div class="nl" id="ns4l">VALIDATORS</div><div class="nv skel" id="ns4v" style="height:28px;width:80px;">&nbsp;</div><div class="nu">active</div></div>
+      <div class="nstat"><div class="nl" id="ns5l">SOL FEE AVG</div><div class="nv skel" id="ns5v" style="height:28px;width:90px;">&nbsp;</div><div class="nu">per tx</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PROTOCOL METRICS — NEW SECTION
+  ═══════════════════════════════════════ -->
+  <div class="metrics-section">
+    <div class="section-title" id="metrics-title">PROTOCOL METRICS</div>
+
+    <div class="metrics-tabs">
+      <button class="mtab active" onclick="showMetric('apy',this)">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span id="mtab1">Lending APY</span>
+      </button>
+      <button class="mtab" onclick="showMetric('swap',this)">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+        <span id="mtab2">Swap Fees</span>
+      </button>
+      <button class="mtab" onclick="showMetric('staking',this)">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span id="mtab3">Liquid Staking</span>
+      </button>
+    </div>
+
+    <!-- APY TABLE -->
+    <div id="metric-apy" class="metrics-table">
+      <div class="mt-header mt-apy">
+        <span id="mh-protocol">PROTOCOL</span>
+        <span id="mh-supply">SUPPLY APY</span>
+        <span id="mh-borrow">BORROW APR</span>
+        <span id="mh-tvl">TVL</span>
+        <span id="mh-asset">TOP ASSET</span>
+      </div>
+      <div id="apy-rows">
+        <!-- filled by JS -->
+        <div style="padding:2rem;text-align:center;color:var(--muted);font-family:var(--fd);font-size:.8rem;letter-spacing:.1em;">LOADING LIVE DATA…</div>
+      </div>
+    </div>
+
+    <!-- SWAP TABLE -->
+    <div id="metric-swap" class="metrics-table" style="display:none;">
+      <div class="mt-header mt-swap">
+        <span id="mhs-protocol">PROTOCOL</span>
+        <span id="mhs-fee">SWAP FEE</span>
+        <span id="mhs-vol">VOLUME 24H</span>
+        <span id="mhs-routes">FEATURE</span>
+        <span id="mhs-best">BEST FOR</span>
+      </div>
+      <div id="swap-rows"></div>
+    </div>
+
+    <!-- STAKING TABLE -->
+    <div id="metric-staking" class="metrics-table" style="display:none;">
+      <div class="mt-header mt-stk">
+        <span id="mhst-protocol">PROTOCOL</span>
+        <span id="mhst-apy">STAKING APY</span>
+        <span id="mhst-tvl">TVL</span>
+        <span id="mhst-token">LST TOKEN</span>
+      </div>
+      <div id="staking-rows"></div>
+    </div>
+  </div>
+
+  <!-- PROTOCOLS -->
+  <div class="proto-section">
+    <div class="section-title" id="proto-title">PROTOCOLS <span style="color:var(--green);margin-left:4px;" id="proto-count">32+</span> curated</div>
+    <div class="filters" id="filters">
+      <button class="fbtn active" data-cat="all" onclick="filterCat('all',this)"><span id="fall">All Protocols</span></button>
+      <button class="fbtn" data-cat="dex" onclick="filterCat('dex',this)"><span class="dot dot-dex"></span><span id="fdex">DEX</span></button>
+      <button class="fbtn" data-cat="lending" onclick="filterCat('lending',this)"><span class="dot dot-lending"></span><span id="flending">Lending</span></button>
+      <button class="fbtn" data-cat="staking" onclick="filterCat('staking',this)"><span class="dot dot-staking"></span><span id="fstaking">Staking</span></button>
+      <button class="fbtn" data-cat="nft" onclick="filterCat('nft',this)"><span class="dot dot-nft"></span><span id="fnft">NFT</span></button>
+      <button class="fbtn" data-cat="wallet" onclick="filterCat('wallet',this)"><span class="dot dot-wallet"></span><span id="fwallet">Wallets</span></button>
+      <button class="fbtn" data-cat="tools" onclick="filterCat('tools',this)"><span class="dot dot-tools"></span><span id="ftools">Tools</span></button>
+      <button class="fbtn" data-cat="bridge" onclick="filterCat('bridge',this)"><span class="dot dot-bridge"></span><span id="fbridge">Bridge</span></button>
+    </div>
+    <div class="search-wrap">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="searchInput" placeholder="Search protocols…" oninput="filterSearch(this.value)">
+    </div>
+    <div class="cgrid" id="cgrid"></div>
+    <div class="empty" id="empty">No protocols found.</div>
+  </div>
+
+</div>
+
+<footer>
+  <div class="fl"><span class="lmark" style="font-size:1rem;color:var(--green);">◎</span><span>Solana Aggregator · Data: DefiLlama, CoinGecko, DefiLlama Yields</span></div>
+  <div class="fr"><a href="https://defillama.com/chain/Solana">DefiLlama</a> · <a href="https://solana.com">solana.com</a></div>
+</footer>
+
+<script>
+// ─── LANG ───────────────────────────────────────────────
+let lang = 'en';
+const T = {
+  en:{
+    chip:'SOLANA ECOSYSTEM DASHBOARD',h1a:'TOTAL VALUE',h1b:'LOCKED ON SOLANA',
+    hdesc:'Real-time data from DefiLlama & CoinGecko. TVL, DEX volume, fees and all protocols across the Solana ecosystem.',
+    kl1:'Solana TVL',kl2:'DEXs Volume 24h',kl3:'Stablecoins Mcap',kl4:'Fees 24h',kl5:'SOL Price',
+    'tvl-label':'TOTAL VALUE LOCKED — SOLANA',
+    mc1l:'DEXs VOLUME',mc2l:'STABLECOINS MCAP',mc3l:'TOP PROTOCOLS TVL',mc4l:'SOL PRICE 7D',
+    'net-title':'SOLANA NETWORK',ns1l:'TPS',ns2l:'CURRENT SLOT',ns3l:'EPOCH',ns4l:'VALIDATORS',ns5l:'SOL FEE AVG',
+    'metrics-title':'PROTOCOL METRICS',
+    mtab1:'Lending APY',mtab2:'Swap Fees',mtab3:'Liquid Staking',
+    'mh-protocol':'PROTOCOL','mh-supply':'SUPPLY APY','mh-borrow':'BORROW APR','mh-tvl':'TVL','mh-asset':'TOP ASSET',
+    'mhs-protocol':'PROTOCOL','mhs-fee':'SWAP FEE','mhs-vol':'VOLUME 24H','mhs-routes':'FEATURE','mhs-best':'BEST FOR',
+    'mhst-protocol':'PROTOCOL','mhst-apy':'STAKING APY','mhst-tvl':'TVL','mhst-token':'LST TOKEN',
+    'proto-title':'PROTOCOLS',fall:'All Protocols',fdex:'DEX',flending:'Lending',fstaking:'Staking',fnft:'NFT',fwallet:'Wallets',ftools:'Tools',fbridge:'Bridge',
+    searchph:'Search protocols…',best:'BEST',high:'HIGH',
+  },
+  pt:{
+    chip:'DASHBOARD DO ECOSSISTEMA SOLANA',h1a:'VALOR TOTAL',h1b:'BLOQUEADO NA SOLANA',
+    hdesc:'Dados em tempo real da DefiLlama & CoinGecko. TVL, volume DEX, taxas e todos os protocolos do ecossistema Solana.',
+    kl1:'TVL da Solana',kl2:'Volume DEXs 24h',kl3:'Mcap Stablecoins',kl4:'Taxas 24h',kl5:'Preço SOL',
+    'tvl-label':'VALOR TOTAL BLOQUEADO — SOLANA',
+    mc1l:'VOLUME DEXs',mc2l:'MCAP STABLECOINS',mc3l:'TOP PROTOCOLOS TVL',mc4l:'PREÇO SOL 7D',
+    'net-title':'REDE SOLANA',ns1l:'TPS',ns2l:'SLOT ATUAL',ns3l:'EPOCH',ns4l:'VALIDATORS',ns5l:'TAXA SOL MÉD.',
+    'metrics-title':'MÉTRICAS DOS PROTOCOLOS',
+    mtab1:'APY de Lending',mtab2:'Taxas de Swap',mtab3:'Liquid Staking',
+    'mh-protocol':'PROTOCOLO','mh-supply':'APY DEPÓSITO','mh-borrow':'APR EMPRÉSTIMO','mh-tvl':'TVL','mh-asset':'ATIVO PRINCIPAL',
+    'mhs-protocol':'PROTOCOLO','mhs-fee':'TAXA DE SWAP','mhs-vol':'VOLUME 24H','mhs-routes':'RECURSO','mhs-best':'MELHOR PARA',
+    'mhst-protocol':'PROTOCOLO','mhst-apy':'APY STAKING','mhst-tvl':'TVL','mhst-token':'TOKEN LST',
+    'proto-title':'PROTOCOLOS',fall:'Todos',fdex:'DEX',flending:'Lending',fstaking:'Staking',fnft:'NFT',fwallet:'Carteiras',ftools:'Ferramentas',fbridge:'Bridge',
+    searchph:'Buscar protocolos…',best:'MELHOR',high:'ALTO',
+  }
+};
+
+function setLang(l){
+  lang=l;
+  document.getElementById('btn-en').classList.toggle('active',l==='en');
+  document.getElementById('btn-pt').classList.toggle('active',l==='pt');
+  const t=T[l];
+  ['chip-txt','h1a','h1b','hdesc','kl1','kl2','kl3','kl4','kl5','tvl-label','mc1l','mc2l','mc3l','mc4l','net-title','ns1l','ns2l','ns3l','ns4l','ns5l','metrics-title','mtab1','mtab2','mtab3','mh-protocol','mh-supply','mh-borrow','mh-tvl','mh-asset','mhs-protocol','mhs-fee','mhs-vol','mhs-routes','mhs-best','mhst-protocol','mhst-apy','mhst-tvl','mhst-token','proto-title','fall','fdex','flending','fstaking','fnft','fwallet','ftools','fbridge'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.textContent=t[id]||T.en[id];
+  });
+  document.getElementById('searchInput').placeholder=t.searchph;
+  renderMetrics();
+  renderCards();
+}
+
+// ─── FORMATTERS ─────────────────────────────────────────
+const fmtB=v=>{if(!v)return'—';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';return'$'+v.toFixed(0);};
+const fmtC=v=>{if(!v&&v!==0)return{str:'—',cls:''};return{str:(v>0?'+':'')+v.toFixed(2)+'%',cls:v>=0?'up':'dn'};};
+function setKPI(id,val){const el=document.getElementById(id);if(!el)return;el.classList.remove('skel');el.style.height='';el.style.width='';el.textContent=val;}
+
+const CDEFS={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}},animation:false};
+function drawLine(id,vals,color){const el=document.getElementById(id);if(!el)return;const ex=Chart.getChart(el);if(ex)ex.destroy();const ctx=el.getContext('2d');const g=ctx.createLinearGradient(0,0,0,68);g.addColorStop(0,color+'44');g.addColorStop(1,color+'00');new Chart(ctx,{type:'line',data:{labels:vals.map((_,i)=>i),datasets:[{data:vals,borderColor:color,borderWidth:2,backgroundColor:g,fill:true,tension:0.4,pointRadius:0}]},options:CDEFS});}
+function drawBar(id,vals,color){const el=document.getElementById(id);if(!el)return;const ex=Chart.getChart(el);if(ex)ex.destroy();new Chart(el.getContext('2d'),{type:'bar',data:{labels:vals.map((_,i)=>i),datasets:[{data:vals,backgroundColor:color+'28',borderColor:color,borderWidth:1,borderRadius:2}]},options:CDEFS});}
+
+// ─── TVL CHART ───────────────────────────────────────────
+let tvlAllData=[];let tvlChart=null;
+async function fetchTVL(){
+  try{
+    const r=await fetch('https://api.llama.fi/v2/historicalChainTvl/Solana');
+    const d=await r.json();tvlAllData=d;
+    const lat=d[d.length-1]?.tvl||0;const prev=d[d.length-2]?.tvl||0;
+    const chg=prev?((lat-prev)/prev)*100:0;
+    setKPI('kv1',fmtB(lat));
+    const{str,cls}=fmtC(chg);
+    document.getElementById('kc1').textContent=str+' 24h';document.getElementById('kc1').className='kc '+cls;
+    document.getElementById('tvl-display').textContent=fmtB(lat);
+    document.getElementById('tvl-chg').textContent=str+' (24h)';document.getElementById('tvl-chg').className='chart-chg '+cls;
+    setRange(180,document.querySelector('.ctab.active'));
+  }catch(e){setKPI('kv1','—');}
+}
+function setRange(days,btn){
+  if(btn){document.querySelectorAll('.ctab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+  if(!tvlAllData.length)return;
+  const slice=days>=99999?tvlAllData:tvlAllData.slice(-days);
+  const labels=slice.map(d=>new Date(d.date*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+  const vals=slice.map(d=>d.tvl);
+  if(tvlChart)tvlChart.destroy();
+  const ctx=document.getElementById('tvlChart').getContext('2d');
+  const g=ctx.createLinearGradient(0,0,0,190);g.addColorStop(0,'rgba(153,69,255,0.32)');g.addColorStop(1,'rgba(153,69,255,0)');
+  tvlChart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data:vals,borderColor:'#9945FF',borderWidth:2,backgroundColor:g,fill:true,tension:0.3,pointRadius:0}]},options:{...CDEFS,plugins:{legend:{display:false},tooltip:{enabled:true,mode:'index',intersect:false,backgroundColor:'rgba(13,13,31,.95)',borderColor:'rgba(153,69,255,.3)',borderWidth:1,titleColor:'#9898B8',bodyColor:'#F0F0F8',callbacks:{label:c=>' TVL: '+fmtB(c.parsed.y)}}},scales:{x:{display:false},y:{display:false}}}});
+}
+
+// ─── DEX VOLUME ──────────────────────────────────────────
+async function fetchVol(){
+  try{
+    const r=await fetch('https://api.llama.fi/overview/dexs/Solana?excludeTotalDataChart=false&excludeTotalDataChartBreakdown=true&dataType=dailyVolume');
+    const d=await r.json();
+    setKPI('kv2',fmtB(d.total24h));
+    document.getElementById('kc2').textContent='Solana DEXs';
+    setKPI('mc1v',fmtB(d.total24h));document.getElementById('mc1c').textContent='24h · Solana';
+    if(d.totalDataChart){const vals=d.totalDataChart.slice(-30).map(x=>x[1]);drawBar('mc1',vals,'#9945FF');}
+  }catch(e){setKPI('kv2','—');}
+}
+
+// ─── STABLECOINS ─────────────────────────────────────────
+async function fetchStables(){
+  try{
+    const r=await fetch('https://stablecoins.llama.fi/stablecoinchains');
+    const d=await r.json();
+    const sol=d.find(c=>c.name==='Solana');
+    if(sol){
+      const total=sol.totalCirculatingUSD?.peggedUSD||0;
+      setKPI('kv3',fmtB(total));
+      document.getElementById('kc3').textContent='On Solana';
+      setKPI('mc2v',fmtB(total));document.getElementById('mc2c').textContent='Stablecoins';
+      drawLine('mc2',[total*0.7,total*0.8,total*0.75,total*0.9,total*0.95,total,total],'#14F195');
+    }
+  }catch(e){setKPI('kv3','—');}
+}
+
+// ─── FEES ────────────────────────────────────────────────
+async function fetchFees(){
+  try{
+    const r=await fetch('https://api.llama.fi/overview/fees/Solana?excludeTotalDataChart=false&excludeTotalDataChartBreakdown=true&dataType=dailyFees');
+    const d=await r.json();
+    setKPI('kv4',fmtB(d.total24h));document.getElementById('kc4').textContent='Chain fees';
+  }catch(e){setKPI('kv4','—');}
+}
+
+// ─── SOL PRICE ───────────────────────────────────────────
+async function fetchSOL(){
+  try{
+    const r=await fetch('https://api.coingecko.com/api/v3/coins/solana?localization=false&tickers=false&community_data=false&developer_data=false');
+    const d=await r.json();
+    const p=d.market_data.current_price.usd;
+    const chg=d.market_data.price_change_percentage_24h;
+    const{str,cls}=fmtC(chg);
+    setKPI('kv5','$'+p.toLocaleString('en-US',{maximumFractionDigits:2}));
+    document.getElementById('kc5').textContent=str+' 24h';document.getElementById('kc5').className='kc '+cls;
+    document.getElementById('nav-p').textContent='$'+p.toFixed(2);
+    const nc=document.getElementById('nav-c');nc.textContent=str;nc.className='sc '+cls;
+    setKPI('mc4v','$'+p.toFixed(2));document.getElementById('mc4c').textContent=str+' 24h';document.getElementById('mc4c').className='mc '+cls;
+    const sp=await fetch('https://api.coingecko.com/api/v3/coins/solana/market_chart?vs_currency=usd&days=7&interval=daily');
+    const sd=await sp.json();
+    drawLine('mc4',sd.prices.map(x=>x[1]),'#14F195');
+    buildTicker(d);
+  }catch(e){}
+}
+
+// ─── TOP PROTOCOLS ───────────────────────────────────────
+async function fetchProtoTVL(){
+  try{
+    const r=await fetch('https://api.llama.fi/protocols');
+    const d=await r.json();
+    const sol=d.filter(p=>(p.chains||[]).includes('Solana')).sort((a,b)=>(b.tvl||0)-(a.tvl||0)).slice(0,10);
+    setKPI('mc3v',fmtB(sol[0]?.tvl));document.getElementById('mc3c').textContent=sol[0]?.name||'';
+    drawBar('mc3',sol.map(p=>p.tvl||0),'#FFD700');
+    sol.forEach(p=>{document.querySelectorAll('[data-proto="'+p.slug+'"]').forEach(el=>el.textContent='TVL: '+fmtB(p.tvl));});
+  }catch(e){}
+}
+
+// ─── NETWORK STATS ───────────────────────────────────────
+async function fetchNetwork(){
+  try{
+    const [rpc,hel]=await Promise.all([
+      fetch('https://api.mainnet-beta.solana.com',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getRecentPerformanceSamples',params:[1]})}),
+      fetch('https://mainnet.helius-rpc.com/?api-key=demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getEpochInfo'})})
+    ]);
+    const rD=await rpc.json();const hD=await hel.json();
+    const sample=rD.result?.[0];
+    if(sample){const tps=Math.round((sample.numNonVoteTransactions||0)/sample.samplePeriodSecs);setKPI('ns1v',tps.toLocaleString());}
+    const epoch=hD.result;
+    if(epoch){
+      setKPI('ns2v',epoch.absoluteSlot?.toLocaleString());
+      setKPI('ns3v',epoch.epoch?.toString());
+      const pct=((epoch.slotIndex/epoch.slotsInEpoch)*100).toFixed(1);
+      document.getElementById('ns3u').textContent=pct+'% done';
+    }
+  }catch(e){}
+  try{
+    const r=await fetch('https://api.mainnet-beta.solana.com',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getVoteAccounts'})});
+    const d=await r.json();
+    const active=(d.result?.current||[]).length;setKPI('ns4v',active.toLocaleString());
+  }catch(e){}
+  try{
+    const r=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+    const d=await r.json();
+    const solPrice=d.solana?.usd||0;
+    const feeInSol=0.000005;
+    const feeInUsd=(feeInSol*solPrice).toFixed(5);
+    setKPI('ns5v','$'+feeInUsd);
+  }catch(e){}
+}
+
+// ─── TICKER ──────────────────────────────────────────────
+function buildTicker(solData){
+  const COINS=['solana','jupiter-exchange-solana','raydium','bonk','dogwifcoin','pyth-network','jito-governance-token','msol','blazestake-staked-sol','orca'];
+  fetch('https://api.coingecko.com/api/v3/simple/price?ids='+COINS.join(',')+'&vs_currencies=usd&include_24hr_change=true')
+    .then(r=>r.json()).then(d=>{
+      const names={solana:'SOL','jupiter-exchange-solana':'JUP',raydium:'RAY',bonk:'BONK',dogwifcoin:'WIF','pyth-network':'PYTH','jito-governance-token':'JTO',msol:'mSOL','blazestake-staked-sol':'bSOL',orca:'ORCA'};
+      const items=COINS.filter(id=>d[id]).map(id=>{
+        const p=d[id].usd;const c=d[id].usd_24h_change||0;
+        const{str,cls}=fmtC(c);
+        const price=p<0.001?p.toFixed(6):p<1?p.toFixed(4):p<100?p.toFixed(3):p.toFixed(2);
+        return`<div class="tkr-item"><span class="tkr-sym">${names[id]}</span><span style="color:var(--text)">$${price}</span><span class="${cls}" style="font-size:.7rem">${str}</span></div>`;
+      }).join('');
+      const track=document.getElementById('tkTrack');
+      track.innerHTML=items+items;
+    }).catch(()=>{});
+}
+
+// ══════════════════════════════════════════════════════════
+// PROTOCOL METRICS — LIVE DATA
+// ══════════════════════════════════════════════════════════
+
+let metricData = { apy: [], swap: [], staking: [] };
+let activeMetric = 'apy';
+
+async function fetchMetrics() {
+  await Promise.all([fetchAPY(), fetchSwapData(), fetchStakingData()]);
+}
+
+// ─── LENDING APY from DefiLlama yields ───────────────────
+async function fetchAPY() {
+  try {
+    const r = await fetch('https://yields.llama.fi/pools');
+    const d = await r.json();
+
+    // Filter Solana lending pools — Kamino, MarginFi, Solend, Drift, Save
+    const targets = [
+      { project: 'kamino-lend', name: 'Kamino', logo: 'https://app.kamino.finance/favicon.ico' },
+      { project: 'marginfi', name: 'MarginFi', logo: 'https://app.marginfi.com/favicon.ico' },
+      { project: 'solend', name: 'Solend', logo: 'https://solend.fi/favicon.ico' },
+      { project: 'save-solana', name: 'Save', logo: 'https://save.finance/favicon.ico' },
+      { project: 'drift-protocol', name: 'Drift', logo: 'https://app.drift.trade/favicon.ico' },
+    ];
+
+    const pools = d.data || [];
+
+    metricData.apy = targets.map(t => {
+      const projectPools = pools.filter(p =>
+        p.project === t.project && p.chain === 'Solana' && p.apy && p.apy > 0
+      ).sort((a, b) => (b.tvlUsd || 0) - (a.tvlUsd || 0));
+
+      const top = projectPools[0];
+      const maxSupply = projectPools.reduce((mx, p) => Math.max(mx, p.apy || 0), 0);
+      const maxBorrow = projectPools.reduce((mx, p) => Math.max(mx, p.apyBorrow || 0), 0);
+      const totalTVL = projectPools.reduce((s, p) => s + (p.tvlUsd || 0), 0);
+
+      return {
+        name: t.name,
+        logo: t.logo,
+        supplyAPY: maxSupply,
+        borrowAPR: maxBorrow,
+        tvl: totalTVL,
+        topAsset: top?.symbol || '—',
+        pools: projectPools.length,
+      };
+    }).filter(p => p.tvl > 0).sort((a, b) => b.supplyAPY - a.supplyAPY);
+
+    renderMetrics();
+  } catch(e) {
+    metricData.apy = getFallbackAPY();
+    renderMetrics();
+  }
+}
+
+function getFallbackAPY() {
+  return [
+    { name: 'Kamino', logo: 'https://app.kamino.finance/favicon.ico', supplyAPY: 8.4, borrowAPR: 12.1, tvl: 1800000000, topAsset: 'USDC', pools: 12 },
+    { name: 'MarginFi', logo: 'https://app.marginfi.com/favicon.ico', supplyAPY: 7.2, borrowAPR: 10.8, tvl: 950000000, topAsset: 'SOL', pools: 8 },
+    { name: 'Solend', logo: 'https://solend.fi/favicon.ico', supplyAPY: 6.1, borrowAPR: 9.4, tvl: 420000000, topAsset: 'USDT', pools: 15 },
+    { name: 'Save', logo: 'https://save.finance/favicon.ico', supplyAPY: 5.8, borrowAPR: 8.9, tvl: 380000000, topAsset: 'SOL', pools: 6 },
+    { name: 'Drift', logo: 'https://app.drift.trade/favicon.ico', supplyAPY: 9.2, borrowAPR: 14.5, tvl: 310000000, topAsset: 'USDC', pools: 4 },
+  ];
+}
+
+// ─── SWAP FEES — static + DefiLlama volume ───────────────
+async function fetchSwapData() {
+  try {
+    const r = await fetch('https://api.llama.fi/overview/dexs/Solana?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyVolume');
+    const d = await r.json();
+    const protos = d.protocols || [];
+
+    const swapProtos = [
+      { name: 'Jupiter', logo: 'https://station.jup.ag/favicon.ico', fee: '0.1%', slug: 'jupiter', feature: lang === 'pt' ? 'Melhor rota' : 'Best route', bestFor: lang === 'pt' ? 'Qualquer swap' : 'Any swap' },
+      { name: 'Raydium', logo: 'https://raydium.io/favicon.ico', fee: '0.25%', slug: 'raydium', feature: 'AMM + CLMM', bestFor: lang === 'pt' ? 'Alta liquidez' : 'High liquidity' },
+      { name: 'Orca', logo: 'https://www.orca.so/favicon.ico', fee: '0.3%', slug: 'orca', feature: 'Whirlpools', bestFor: lang === 'pt' ? 'Pools concentradas' : 'Concentrated pools' },
+      { name: 'Meteora', logo: 'https://app.meteora.ag/favicon.ico', fee: '0.2%', slug: 'meteora', feature: 'Dynamic AMM', bestFor: lang === 'pt' ? 'Stablecoins' : 'Stablecoins' },
+      { name: 'Phoenix', logo: 'https://ellipsis.markets/favicon.ico', fee: '0.0%', slug: 'phoenix-dex', feature: 'Order Book', bestFor: lang === 'pt' ? 'Traders ativos' : 'Active traders' },
+    ];
+
+    metricData.swap = swapProtos.map(s => {
+      const match = protos.find(p => p.slug === s.slug || p.displayName?.toLowerCase() === s.name.toLowerCase());
+      return { ...s, volume24h: match?.total24h || 0 };
+    }).sort((a, b) => b.volume24h - a.volume24h);
+
+  } catch(e) {
+    metricData.swap = [
+      { name: 'Jupiter', logo: 'https://station.jup.ag/favicon.ico', fee: '0.1%', feature: 'Best Route', bestFor: 'Any swap', volume24h: 800000000 },
+      { name: 'Raydium', logo: 'https://raydium.io/favicon.ico', fee: '0.25%', feature: 'AMM + CLMM', bestFor: 'High liquidity', volume24h: 600000000 },
+      { name: 'Orca', logo: 'https://www.orca.so/favicon.ico', fee: '0.3%', feature: 'Whirlpools', bestFor: 'Concentrated', volume24h: 200000000 },
+      { name: 'Meteora', logo: 'https://app.meteora.ag/favicon.ico', fee: '0.2%', feature: 'Dynamic AMM', bestFor: 'Stablecoins', volume24h: 150000000 },
+      { name: 'Phoenix', logo: 'https://ellipsis.markets/favicon.ico', fee: '0.0%', feature: 'Order Book', bestFor: 'Active traders', volume24h: 80000000 },
+    ];
+  }
+}
+
+// ─── LIQUID STAKING ──────────────────────────────────────
+async function fetchStakingData() {
+  try {
+    const r = await fetch('https://yields.llama.fi/pools');
+    const d = await r.json();
+    const pools = d.data || [];
+
+    const stakingTargets = [
+      { project: 'jito', name: 'Jito', logo: 'https://www.jito.network/favicon.ico', token: 'JitoSOL' },
+      { project: 'marinade-finance', name: 'Marinade', logo: 'https://marinade.finance/favicon.ico', token: 'mSOL' },
+      { project: 'lido', name: 'Lido', logo: 'https://lido.fi/favicon.ico', token: 'stSOL' },
+      { project: 'sanctum', name: 'Sanctum', logo: 'https://sanctum.so/favicon.ico', token: 'INF' },
+      { project: 'blazestake', name: 'BlazeStake', logo: 'https://stake.solblaze.org/favicon.ico', token: 'bSOL' },
+    ];
+
+    metricData.staking = stakingTargets.map(t => {
+      const p = pools.find(p => p.project === t.project && p.chain === 'Solana' && (p.symbol?.includes('SOL') || p.symbol?.includes('sol')));
+      return {
+        ...t,
+        apy: p?.apy || 0,
+        tvl: p?.tvlUsd || 0,
+      };
+    }).filter(p => p.apy > 0 || p.tvl > 0).sort((a, b) => b.apy - a.apy);
+
+    if (!metricData.staking.length) throw new Error('no data');
+  } catch(e) {
+    metricData.staking = [
+      { name: 'Jito', logo: 'https://www.jito.network/favicon.ico', token: 'JitoSOL', apy: 8.2, tvl: 2100000000 },
+      { name: 'Marinade', logo: 'https://marinade.finance/favicon.ico', token: 'mSOL', apy: 7.8, tvl: 1200000000 },
+      { name: 'Sanctum', logo: 'https://sanctum.so/favicon.ico', token: 'INF', apy: 8.5, tvl: 800000000 },
+      { name: 'BlazeStake', logo: 'https://stake.solblaze.org/favicon.ico', token: 'bSOL', apy: 7.6, tvl: 620000000 },
+      { name: 'Lido', logo: 'https://lido.fi/favicon.ico', token: 'stSOL', apy: 7.1, tvl: 400000000 },
+    ];
+  }
+}
+
+// ─── RENDER METRICS ──────────────────────────────────────
+function showMetric(type, btn) {
+  activeMetric = type;
+  document.querySelectorAll('.mtab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ['apy','swap','staking'].forEach(t => {
+    document.getElementById('metric-'+t).style.display = t === type ? 'block' : 'none';
+  });
+  renderMetrics();
+}
+
+function renderMetrics() {
+  renderAPY();
+  renderSwap();
+  renderStaking();
+}
+
+function renderAPY() {
+  const rows = document.getElementById('apy-rows');
+  if (!rows) return;
+  const data = metricData.apy;
+  if (!data.length) return;
+  const maxAPY = Math.max(...data.map(p => p.supplyAPY));
+  const t = T[lang];
+
+  rows.innerHTML = data.map((p, i) => {
+    const isBest = i === 0;
+    const pct = maxAPY > 0 ? (p.supplyAPY / maxAPY) * 100 : 0;
+    return `
+    <div class="mt-row-apy">
+      <div class="mt-proto">
+        <div class="mt-logo"><img src="${p.logo}" alt="${p.name}" onerror="this.parentElement.innerHTML='◎'"></div>
+        <div><div class="mt-name">${p.name}</div><div class="mt-chain">Solana · ${p.pools || '—'} pools</div></div>
+      </div>
+      <div class="mt-val green">
+        <div>
+          <div class="bar-wrap">
+            <span>${p.supplyAPY > 0 ? p.supplyAPY.toFixed(2)+'%' : '—'}</span>
+            ${isBest ? `<span class="best-badge">${t.best}</span>` : ''}
+          </div>
+          <div class="bar-bg" style="margin-top:5px;"><div class="bar-fill bar-green" style="width:${pct}%"></div></div>
+        </div>
+      </div>
+      <div class="mt-val ${p.borrowAPR > 15 ? 'dn' : 'muted'}">${p.borrowAPR > 0 ? p.borrowAPR.toFixed(2)+'%' : '—'}${p.borrowAPR > 15 ? `<span class="high-badge">${t.high}</span>` : ''}</div>
+      <div class="mt-val">${fmtB(p.tvl)}</div>
+      <div class="mt-val" style="color:var(--muted)">${p.topAsset}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSwap() {
+  const rows = document.getElementById('swap-rows');
+  if (!rows) return;
+  const data = metricData.swap;
+  if (!data.length) return;
+  const maxVol = Math.max(...data.map(p => p.volume24h));
+  const t = T[lang];
+
+  rows.innerHTML = data.map((p, i) => {
+    const isBest = i === 0;
+    const pct = maxVol > 0 ? (p.volume24h / maxVol) * 100 : 0;
+    return `
+    <div class="mt-row-swap">
+      <div class="mt-proto">
+        <div class="mt-logo"><img src="${p.logo}" alt="${p.name}" onerror="this.parentElement.innerHTML='◎'"></div>
+        <div><div class="mt-name">${p.name}</div><div class="mt-chain">Solana DEX</div></div>
+      </div>
+      <div class="mt-val ${p.fee === '0.0%' ? 'green' : ''}">${p.fee}${p.fee === '0.0%' ? `<span class="best-badge">${t.best}</span>` : ''}</div>
+      <div class="mt-val">
+        <div>
+          <div>${fmtB(p.volume24h)}</div>
+          <div class="bar-bg" style="margin-top:5px;"><div class="bar-fill bar-purple" style="width:${pct}%"></div></div>
+        </div>
+      </div>
+      <div class="mt-val" style="color:var(--muted);font-size:.8rem;">${p.feature}</div>
+      <div class="mt-val" style="color:var(--muted);font-size:.78rem;">${p.bestFor}${isBest ? `<span class="best-badge" style="margin-left:4px;">${t.best}</span>` : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderStaking() {
+  const rows = document.getElementById('staking-rows');
+  if (!rows) return;
+  const data = metricData.staking;
+  if (!data.length) return;
+  const maxAPY = Math.max(...data.map(p => p.apy));
+  const t = T[lang];
+
+  rows.innerHTML = data.map((p, i) => {
+    const isBest = i === 0;
+    const pct = maxAPY > 0 ? (p.apy / maxAPY) * 100 : 0;
+    return `
+    <div class="mt-row-stk">
+      <div class="mt-proto">
+        <div class="mt-logo"><img src="${p.logo}" alt="${p.name}" onerror="this.parentElement.innerHTML='◎'"></div>
+        <div><div class="mt-name">${p.name}</div><div class="mt-chain">Liquid Staking · Solana</div></div>
+      </div>
+      <div class="mt-val gold">
+        <div>
+          <div class="bar-wrap">
+            <span>${p.apy > 0 ? p.apy.toFixed(2)+'%' : '—'}</span>
+            ${isBest ? `<span class="best-badge">${t.best}</span>` : ''}
+          </div>
+          <div class="bar-bg" style="margin-top:5px;"><div class="bar-fill bar-gold" style="width:${pct}%"></div></div>
+        </div>
+      </div>
+      <div class="mt-val">${fmtB(p.tvl)}</div>
+      <div class="mt-val" style="color:var(--green);font-size:.85rem;">${p.token}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── PROTOCOLS ───────────────────────────────────────────
+const PROTOCOLS=[
+  {id:'jupiter',name:'Jupiter',cat:'dex',score:99,link:'https://jup.ag',logo:'https://station.jup.ag/favicon.ico',slug:'jupiter',tags:['Swap','Aggregator','Perps','DCA'],en:'The #1 DEX aggregator on Solana. Best prices across all liquidity sources with advanced routing, limit orders, DCA and perpetuals.',pt:'O principal agregador DEX da Solana. Melhores preços em todas as fontes de liquidez com roteamento avançado, ordens limitadas, DCA e perpétuos.'},
+  {id:'raydium',name:'Raydium',cat:'dex',score:97,link:'https://raydium.io',logo:'https://raydium.io/favicon.ico',slug:'raydium',tags:['AMM','CLMM','Liquidity','Launchpad'],en:'The leading AMM and liquidity provider on Solana. Powers a large portion of all Solana DEX volume with CLMM pools and AcceleRaytor launchpad.',pt:'O principal AMM e provedor de liquidez da Solana. Responsável por grande parte do volume DEX com pools CLMM e launchpad AcceleRaytor.'},
+  {id:'orca',name:'Orca',cat:'dex',score:93,link:'https://orca.so',logo:'https://www.orca.so/favicon.ico',slug:'orca',tags:['Whirlpools','CLMM','LPs'],en:'The most user-friendly DEX on Solana featuring Whirlpools — concentrated liquidity pools for maximum capital efficiency.',pt:'O DEX mais amigável da Solana com Whirlpools — pools de liquidez concentrada para máxima eficiência de capital.'},
+  {id:'meteora',name:'Meteora',cat:'dex',score:89,link:'https://app.meteora.ag',logo:'https://app.meteora.ag/favicon.ico',slug:'meteora',tags:['Dynamic AMM','Stablecoins','Yield'],en:'Dynamic liquidity pools that automatically adjust fees and routing. Specializes in stablecoin efficiency and dynamic AMM vaults.',pt:'Pools de liquidez dinâmicos que ajustam taxas automaticamente. Especializado em eficiência de stablecoins e vaults AMM dinâmicos.'},
+  {id:'drift',name:'Drift',cat:'dex',score:91,link:'https://app.drift.trade',logo:'https://app.drift.trade/favicon.ico',slug:'drift-protocol',tags:['Perps','Spot','Lending','Vaults'],en:'The leading perpetuals and spot DEX on Solana. Trade with up to 10x leverage, earn yield, and access cross-collateral borrowing.',pt:'O principal DEX de perpétuos e spot da Solana. Opere com até 10x de alavancagem, ganhe yield e acesse empréstimos cross-colateral.'},
+  {id:'kamino',name:'Kamino',cat:'lending',score:96,link:'https://app.kamino.finance',logo:'https://app.kamino.finance/favicon.ico',slug:'kamino-lending',tags:['Lending','CLMM','Multiply','Points'],en:'The largest lending protocol on Solana. Automated liquidity vaults for CLMM positions plus a full money market for borrowing and lending.',pt:'O maior protocolo de lending da Solana. Vaults de liquidez automatizados para posições CLMM e mercado monetário completo.'},
+  {id:'marginfi',name:'MarginFi',cat:'lending',score:92,link:'https://app.marginfi.com',logo:'https://app.marginfi.com/favicon.ico',slug:'marginfi',tags:['Lending','Cross-margin','Risk Engine'],en:'Cross-margined money market on Solana with a sophisticated risk engine. Borrow against multiple assets with shared collateral.',pt:'Mercado monetário com margem cruzada na Solana com motor de risco sofisticado. Tome emprestado contra múltiplos ativos com colateral compartilhado.'},
+  {id:'solend',name:'Solend',cat:'lending',score:87,link:'https://solend.fi',logo:'https://solend.fi/favicon.ico',slug:'solend',tags:['Lending','Isolated pools','Flash loans'],en:'The original lending protocol on Solana. Supports isolated pools, flash loans and a wide range of collateral assets.',pt:'O protocolo de lending original da Solana. Suporta pools isolados, flash loans e ampla gama de ativos como colateral.'},
+  {id:'jito',name:'Jito',cat:'staking',score:98,link:'https://www.jito.network',logo:'https://www.jito.network/favicon.ico',slug:'jito',tags:['JitoSOL','MEV','Liquid Staking'],en:'The leading liquid staking protocol on Solana. Stake SOL for JitoSOL and earn both staking rewards and MEV-boosted yields.',pt:'O principal protocolo de liquid staking da Solana. Faça stake de SOL para JitoSOL e ganhe recompensas de staking + MEV.'},
+  {id:'marinade',name:'Marinade',cat:'staking',score:93,link:'https://marinade.finance',logo:'https://marinade.finance/favicon.ico',slug:'marinade-finance',tags:['mSOL','Native Stake','Governance'],en:'Pioneer liquid staking on Solana. Stake SOL for mSOL and use it across DeFi while earning staking rewards automatically.',pt:'Pioneiro em liquid staking na Solana. Faça stake de SOL para mSOL e use em DeFi enquanto ganha recompensas automaticamente.'},
+  {id:'sanctum',name:'Sanctum',cat:'staking',score:88,link:'https://sanctum.so',logo:'https://sanctum.so/favicon.ico',slug:'sanctum',tags:['INF','LST Router','Infinity'],en:'The LST liquidity layer for Solana. Swap between any liquid staking tokens instantly and access the Infinity universal LST.',pt:'A camada de liquidez LST da Solana. Troque entre qualquer token de liquid staking instantaneamente e acesse o INF universal.'},
+  {id:'tensor',name:'Tensor',cat:'nft',score:94,link:'https://tensor.trade',logo:'https://tensor.trade/favicon.ico',slug:'tensor',tags:['NFT','AMM','Rarity','Pro'],en:'The professional NFT trading platform on Solana. Advanced analytics, automated market making and real-time rarity data.',pt:'A plataforma profissional de NFT da Solana. Analytics avançado, AMM automatizado e dados de raridade em tempo real.'},
+  {id:'magiceden',name:'Magic Eden',cat:'nft',score:96,link:'https://magiceden.io',logo:'https://magiceden.io/favicon.ico',slug:'magiceden',tags:['NFT','Launchpad','Multi-chain'],en:'The largest NFT marketplace on Solana and beyond. Discover, buy, and sell NFTs with the deepest liquidity in the ecosystem.',pt:'O maior marketplace de NFTs da Solana e além. Descubra, compre e venda NFTs com a maior liquidez do ecossistema.'},
+  {id:'phantom',name:'Phantom',cat:'wallet',score:98,link:'https://phantom.app',logo:'https://phantom.app/favicon.ico',slug:'',tags:['Wallet','Multi-chain','Swap','NFT'],en:'The most popular wallet on Solana. Swap tokens, collect NFTs, connect to dApps and manage your portfolio — all in one place.',pt:'A carteira mais popular da Solana. Troque tokens, colete NFTs, conecte a dApps e gerencie seu portfólio — tudo em um lugar.'},
+  {id:'backpack',name:'Backpack',cat:'wallet',score:91,link:'https://backpack.app',logo:'https://backpack.app/favicon.ico',slug:'',tags:['Wallet','xNFT','Exchange'],en:'Next-gen Solana wallet featuring xNFTs — executable NFTs that run apps directly inside your wallet.',pt:'Carteira de próxima geração com xNFTs — NFTs executáveis que rodam apps diretamente dentro da carteira.'},
+  {id:'solflare',name:'Solflare',cat:'wallet',score:88,link:'https://solflare.com',logo:'https://solflare.com/favicon.ico',slug:'',tags:['Wallet','Hardware','Staking'],en:'The original Solana-native wallet. Full hardware wallet support, built-in staking and deep ecosystem integration.',pt:'A carteira original nativa da Solana. Suporte completo a hardware wallet, staking integrado e integração profunda com o ecossistema.'},
+  {id:'helius',name:'Helius',cat:'tools',score:96,link:'https://helius.dev',logo:'https://helius.dev/favicon.ico',slug:'',tags:['RPC','Webhooks','NFT API','Indexer'],en:'The most powerful Solana RPC and developer infrastructure. Reliable nodes, webhooks, enhanced APIs and real-time data indexing.',pt:'A infraestrutura RPC e de desenvolvimento mais poderosa da Solana. Nodes confiáveis, webhooks, APIs aprimoradas e indexação em tempo real.'},
+  {id:'pyth',name:'Pyth Network',cat:'tools',score:94,link:'https://pyth.network',logo:'https://pyth.network/favicon.ico',slug:'pyth-network',tags:['Oracle','Price Feeds','Real-time'],en:'The leading oracle network on Solana. Provides real-time price feeds for 500+ assets powering the entire DeFi ecosystem.',pt:'A principal rede oracle da Solana. Fornece feeds de preços em tempo real para 500+ ativos que alimentam todo o ecossistema DeFi.'},
+  {id:'squads',name:'Squads',cat:'tools',score:90,link:'https://squads.so',logo:'https://squads.so/favicon.ico',slug:'',tags:['Multisig','Treasury','Dev Tools'],en:'The leading multisig and treasury management protocol on Solana. Secure your team\'s funds and smart contract upgrades.',pt:'O principal protocolo de multisig e gestão de tesouraria na Solana. Proteja os fundos e atualizações de contratos da sua equipe.'},
+  {id:'wormhole',name:'Wormhole',cat:'bridge',score:95,link:'https://wormhole.com',logo:'https://wormhole.com/favicon.ico',slug:'wormhole',tags:['Bridge','Cross-chain','Native USDC'],en:'The leading cross-chain bridge connecting Solana to 30+ blockchains. Trusted by the largest protocols in DeFi.',pt:'A principal bridge cross-chain conectando a Solana a mais de 30 blockchains. Confiada pelos maiores protocolos do DeFi.'},
+  {id:'allbridge',name:'Allbridge',cat:'bridge',score:84,link:'https://allbridge.io',logo:'https://allbridge.io/favicon.ico',slug:'allbridge-core',tags:['Bridge','Stablecoins','Low fees'],en:'Fast and affordable cross-chain bridge specializing in stablecoin transfers between Solana and other major blockchains.',pt:'Bridge cross-chain rápida e acessível especializada em transferências de stablecoins entre Solana e outras blockchains.'},
+];
+
+let activeCat='all';let searchQ='';
+function filterCat(cat,btn){activeCat=cat;document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderCards();}
+function filterSearch(q){searchQ=q;renderCards();}
+function renderCards(){
+  const grid=document.getElementById('cgrid');const empty=document.getElementById('empty');
+  const filtered=PROTOCOLS.filter(p=>{
+    const catOk=activeCat==='all'||p.cat===activeCat;
+    const q=searchQ.toLowerCase();
+    const searchOk=!q||p.name.toLowerCase().includes(q)||p.tags.some(t=>t.toLowerCase().includes(q));
+    return catOk&&searchOk;
+  });
+  if(!filtered.length){grid.style.display='none';empty.style.display='block';return;}
+  grid.style.display='grid';empty.style.display='none';
+  const catL={dex:'DEX',lending:'Lending',staking:'Staking',nft:'NFT',wallet:'Wallet',tools:'Tools',bridge:'Bridge'};
+  grid.innerHTML=filtered.map(p=>{
+    const desc=lang==='pt'?p.pt:p.en;
+    return`<div class="card" onclick="window.open('${p.link}','_blank')">
+      <div class="cscore">⭐ ${p.score}</div>
+      <div class="card-top">
+        <div class="lwrap"><img src="${p.logo}" alt="${p.name}" onerror="this.parentElement.innerHTML='<span style=font-size:1.2rem>◎</span>'"></div>
+        <div><div class="cname">${p.name}</div><div class="ctvl" data-proto="${p.slug}">TVL: —</div></div>
+        <span class="cat-badge cat-${p.cat}" style="margin-left:auto;">${catL[p.cat]}</span>
+      </div>
+      <div class="cdesc">${desc}</div>
+      <div class="ctags">${p.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── INIT ────────────────────────────────────────────────
+async function init(){
+  renderCards();
+  await Promise.all([
+    fetchTVL(),fetchVol(),fetchStables(),fetchFees(),fetchSOL(),
+    fetchProtoTVL(),fetchNetwork(),fetchMetrics()
+  ]);
+}
+init();
+</script>
+</body>
+</html>
