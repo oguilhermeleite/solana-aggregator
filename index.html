@@ -641,51 +641,58 @@ async function fetchNetwork(){
     }
   }
 
-  // Epoch info via DefiLlama (que tem CORS ok)
+  // Epoch + Slot via múltiplos RPCs públicos com CORS
+  const RPCS = [
+    'https://solana-mainnet.g.alchemy.com/v2/demo',
+    'https://rpc.ankr.com/solana',
+    'https://api.mainnet-beta.solana.com',
+  ];
+  const tryRPC = async (method, params=[]) => {
+    for(const rpc of RPCS){
+      try{
+        const r = await fetch(rpc,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),
+          signal:AbortSignal.timeout(4000)
+        });
+        const d = await r.json();
+        if(d.result) return d.result;
+      }catch(e){ continue; }
+    }
+    return null;
+  };
+
+  // Epoch Info
   try{
-    const r = await fetch('https://api.llama.fi/overview/chains');
-    // Usa CoinGecko para epoch via proxy do solana status
-    const r2 = await fetch('https://solana-mainnet.g.alchemy.com/v2/demo',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getEpochInfo',params:[]})
-    });
-    const d2 = await r2.json();
-    const ep = d2.result;
+    const ep = await tryRPC('getEpochInfo');
     if(ep){
       setKPI('ns2v', ep.absoluteSlot?.toLocaleString());
       setKPI('ns3v', ep.epoch?.toString());
       const pct = ((ep.slotIndex/ep.slotsInEpoch)*100).toFixed(1);
       document.getElementById('ns3u').textContent = pct+'% done';
-      setKPI('ns1v', '—'); // TPS não vem daqui
     }
   }catch(e){}
 
-  // TPS via quicknode public demo
+  // TPS
   try{
-    const r = await fetch('https://api.mainnet-beta.solana.com',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getRecentPerformanceSamples',params:[3]})
-    });
-    const d = await r.json();
-    const s = d.result||[];
-    if(s.length){
+    const s = await tryRPC('getRecentPerformanceSamples',[3]);
+    if(s && s.length){
       const tps = s.reduce((a,x)=>a+Math.round((x.numNonVoteTransactions||0)/x.samplePeriodSecs),0)/s.length;
       setKPI('ns1v', Math.round(tps).toLocaleString());
     }
   }catch(e){}
 
-  // Fee via Jupiter price API
+  // SOL Fee — Jupiter Price API v2
   try{
-    const r = await fetch('https://lite-api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
+    const r = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112',{signal:AbortSignal.timeout(4000)});
     const d = await r.json();
     const p = d.data?.['So11111111111111111111111111111111111111112']?.price||0;
-    if(p) setKPI('ns5v','$'+(0.000005*p).toFixed(5));
+    if(p){ setKPI('ns5v','$'+(0.000005*p).toFixed(5)); }
     else throw new Error('no price');
   }catch(e){
     try{
-      const r2 = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+      const r2 = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd',{signal:AbortSignal.timeout(5000)});
       const d2 = await r2.json();
       const p = d2?.solana?.usd||0;
       if(p) setKPI('ns5v','$'+(0.000005*p).toFixed(5));
@@ -791,9 +798,25 @@ async function fetchSwapData() {
       { name: 'Phoenix', logo: 'https://ellipsis.markets/favicon.ico', fee: '0.0%', slug: 'phoenix-dex', feature: 'Order Book', bestFor: lang === 'pt' ? 'Traders ativos' : 'Active traders' },
     ];
 
+    // Fetch volume individual para cada DEX
+    const volFetches = await Promise.allSettled(
+      ['jupiter','raydium','orca','meteora','phoenix-dex'].map(slug=>
+        fetch('https://api.llama.fi/summary/dexs/'+slug+'?excludeTotalDataChart=true&dataType=dailyVolume',{signal:AbortSignal.timeout(4000)})
+          .then(r=>r.json()).then(d=>({slug,vol:d.total24h||0})).catch(()=>({slug,vol:0}))
+      )
+    );
+    const volMap = {};
+    volFetches.forEach(r=>{ if(r.status==='fulfilled') volMap[r.value.slug]=r.value.vol; });
+
     metricData.swap = swapProtos.map(s => {
-      const match = protos.find(p => p.slug === s.slug || p.displayName?.toLowerCase() === s.name.toLowerCase());
-      return { ...s, volume24h: match?.total24h || 0 };
+      const match = protos.find(p =>
+        p.slug === s.slug ||
+        p.module === s.slug ||
+        p.displayName?.toLowerCase() === s.name.toLowerCase() ||
+        p.name?.toLowerCase() === s.name.toLowerCase()
+      );
+      const volFromMap = volMap[s.slug] || 0;
+      return { ...s, volume24h: volFromMap || match?.total24h || match?.totalVolume || 0 };
     }).sort((a, b) => b.volume24h - a.volume24h);
 
   } catch(e) {
