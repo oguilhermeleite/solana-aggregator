@@ -587,54 +587,81 @@ async function fetchProtoTVL(){
         document.querySelectorAll('[data-proto="'+cardId+'"]').forEach(el=>el.textContent='TVL: '+fmtB(p.tvl));
       }
       document.querySelectorAll('[data-proto="'+p.slug+'"]').forEach(el=>el.textContent='TVL: '+fmtB(p.tvl));
-      // Fallback por nome
-      document.querySelectorAll('[data-proto]').forEach(el=>{
-        if(el.closest('.card')?.querySelector('.cname')?.textContent?.toLowerCase()===p.name?.toLowerCase()){
-          if(el.textContent==='TVL: —' || el.textContent.startsWith('Loading')) el.textContent='TVL: '+fmtB(p.tvl);
-        }
-      });
+    });
+
+    // Buscar TVL individual para protocolos ainda com —
+    const missing = [...document.querySelectorAll('[data-proto]')]
+      .filter(el=>el.textContent==='TVL: —' && el.getAttribute('data-proto'));
+    const slugsToFetch = [...new Set(missing.map(el=>el.getAttribute('data-proto')).filter(Boolean))];
+    slugsToFetch.forEach(async slug=>{
+      if(!slug) return;
+      try{
+        const r = await fetch('https://api.llama.fi/protocol/'+slug);
+        const d = await r.json();
+        const tvl = d.currentChainTvls?.Solana || d.tvl?.[d.tvl.length-1]?.totalLiquidityUSD || 0;
+        if(tvl>0) document.querySelectorAll('[data-proto="'+slug+'"]').forEach(el=>el.textContent='TVL: '+fmtB(tvl));
+      }catch(e){}
     });
   }catch(e){console.warn('fetchProtoTVL error',e);}
 }
 
 // ─── NETWORK STATS ───────────────────────────────────────
 async function fetchNetwork(){
-  // Usar Solana Beach API (público, sem CORS issues)
-  try{
-    const r = await fetch('https://api.solanabeach.io/v1/latest-blocks?limit=1');
-    const d = await r.json();
-    if(d && d[0]){
-      setKPI('ns2v', d[0].blocknumber?.toLocaleString());
-    }
-  }catch(e){}
+  // Slot + Epoch + TPS via RPC público com timeout
+  const rpcCall = async (method, params=[]) => {
+    const controller = new AbortController();
+    const tid = setTimeout(()=>controller.abort(), 5000);
+    try{
+      const r = await fetch('https://api.mainnet-beta.solana.com',{
+        method:'POST', signal:controller.signal,
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})
+      });
+      clearTimeout(tid);
+      return await r.json();
+    }catch(e){ clearTimeout(tid); throw e; }
+  };
 
-  // Epoch info via solanabeach
+  // Epoch Info (slot + epoch)
   try{
-    const r = await fetch('https://api.solanabeach.io/v1/epoch-info');
-    const d = await r.json();
-    if(d){
-      setKPI('ns1v', Math.round(d.transactionsPerSecond||0).toLocaleString());
-      setKPI('ns3v', d.epoch?.toString());
-      const pct = d.epochProgress ? (d.epochProgress*100).toFixed(1) : '—';
+    const d = await rpcCall('getEpochInfo');
+    const ep = d.result;
+    if(ep){
+      setKPI('ns2v', ep.absoluteSlot?.toLocaleString());
+      setKPI('ns3v', ep.epoch?.toString());
+      const pct = ((ep.slotIndex/ep.slotsInEpoch)*100).toFixed(1);
       document.getElementById('ns3u').textContent = pct+'% done';
-      setKPI('ns4v', (d.activeValidators||0).toLocaleString());
     }
+  }catch(e){ setKPI('ns2v','—'); setKPI('ns3v','—'); }
+
+  // TPS
+  try{
+    const d = await rpcCall('getRecentPerformanceSamples',[4]);
+    const samples = d.result||[];
+    if(samples.length){
+      const avg = samples.reduce((s,x)=>s+Math.round((x.numNonVoteTransactions||0)/x.samplePeriodSecs),0)/samples.length;
+      setKPI('ns1v', Math.round(avg).toLocaleString());
+    }
+  }catch(e){ setKPI('ns1v','—'); }
+
+  // Validators via stats API
+  try{
+    const r = await fetch('https://api.stakewiz.com/validators_count',{signal:AbortSignal.timeout(4000)});
+    const d = await r.json();
+    setKPI('ns4v', (d.active||d.total||0).toLocaleString());
   }catch(e){
-    // Fallback: valores estáticos razoáveis se API falhar
-    setKPI('ns1v', '~4,000');
-    setKPI('ns3v', '—');
-    setKPI('ns4v', '1,400+');
+    try{
+      const d2 = await rpcCall('getVoteAccounts');
+      setKPI('ns4v',(d2.result?.current||[]).length.toLocaleString());
+    }catch(e2){ setKPI('ns4v','1,400+'); }
   }
 
-  // SOL Fee via CoinGecko
+  // SOL Fee avg
   try{
-    const r = await fetch('https://price.jup.ag/v6/price?ids=SOL');
+    const r = await fetch('https://price.jup.ag/v6/price?ids=SOL',{signal:AbortSignal.timeout(4000)});
     const d = await r.json();
-    const solPrice = d.data?.SOL?.price || 0;
-    if(solPrice > 0){
-      const feeInUsd = (0.000005 * solPrice).toFixed(5);
-      setKPI('ns5v','$'+feeInUsd);
-    }
+    const p = d.data?.SOL?.price||0;
+    if(p) setKPI('ns5v','$'+(0.000005*p).toFixed(5));
   }catch(e){
     try{
       const r2 = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
@@ -909,7 +936,7 @@ function renderStaking() {
 
 // ─── PROTOCOLS ───────────────────────────────────────────
 const PROTOCOLS=[
-  {id:'jupiter',name:'Jupiter',cat:'dex',score:99,link:'https://jup.ag',logo:'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN/logo.png',slug:'jupiter',tags:['Swap','Aggregator','Perps','DCA'],en:'The #1 DEX aggregator on Solana. Best prices across all liquidity sources with advanced routing, limit orders, DCA and perpetuals.',pt:'O principal agregador DEX da Solana. Melhores preços em todas as fontes de liquidez com roteamento avançado, ordens limitadas, DCA e perpétuos.'},
+  {id:'jupiter',name:'Jupiter',cat:'dex',score:99,link:'https://jup.ag',logo:'https://static.jup.ag/jup/icon.png',slug:'jupiter',tags:['Swap','Aggregator','Perps','DCA'],en:'The #1 DEX aggregator on Solana. Best prices across all liquidity sources with advanced routing, limit orders, DCA and perpetuals.',pt:'O principal agregador DEX da Solana. Melhores preços em todas as fontes de liquidez com roteamento avançado, ordens limitadas, DCA e perpétuos.'},
   {id:'raydium',name:'Raydium',cat:'dex',score:97,link:'https://raydium.io',logo:'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R/logo.png',slug:'raydium',tags:['AMM','CLMM','Liquidity','Launchpad'],en:'The leading AMM and liquidity provider on Solana. Powers a large portion of all Solana DEX volume with CLMM pools and AcceleRaytor launchpad.',pt:'O principal AMM e provedor de liquidez da Solana. Responsável por grande parte do volume DEX com pools CLMM e launchpad AcceleRaytor.'},
   {id:'orca',name:'Orca',cat:'dex',score:93,link:'https://orca.so',logo:'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE/logo.png',slug:'orca',tags:['Whirlpools','CLMM','LPs'],en:'The most user-friendly DEX on Solana featuring Whirlpools — concentrated liquidity pools for maximum capital efficiency.',pt:'O DEX mais amigável da Solana com Whirlpools — pools de liquidez concentrada para máxima eficiência de capital.'},
   {id:'meteora',name:'Meteora',cat:'dex',score:89,link:'https://app.meteora.ag',logo:'https://app.meteora.ag/favicon.ico',slug:'meteora',tags:['Dynamic AMM','Stablecoins','Yield'],en:'Dynamic liquidity pools that automatically adjust fees and routing. Specializes in stablecoin efficiency and dynamic AMM vaults.',pt:'Pools de liquidez dinâmicos que ajustam taxas automaticamente. Especializado em eficiência de stablecoins e vaults AMM dinâmicos.'},
