@@ -534,46 +534,85 @@ async function fetchSOL(){
 }
 
 // ─── TOP PROTOCOLS ───────────────────────────────────────
+// Mapa slug DefiLlama -> id do card
+const SLUG_MAP = {
+  'jito-liquid-staking': 'jito',
+  'kamino': 'kamino',
+  'kamino-lending': 'kamino',
+  'jupiter': 'jupiter',
+  'raydium': 'raydium',
+  'marinade-liquid-staking': 'marinade',
+  'sanctum-liquid-staking': 'sanctum',
+  'marginfi': 'marginfi',
+  'drift-protocol': 'drift',
+  'orca': 'orca',
+  'solend': 'solend',
+  'meteora': 'meteora',
+  'tensor': 'tensor',
+  'magic-eden': 'magiceden',
+  'pyth-network': 'pyth',
+  'wormhole': 'wormhole',
+};
+
 async function fetchProtoTVL(){
   try{
     const r=await fetch('https://api.llama.fi/protocols');
     const d=await r.json();
-    const sol=d.filter(p=>(p.chains||[]).includes('Solana')).sort((a,b)=>(b.tvl||0)-(a.tvl||0)).slice(0,10);
+    const sol=d.filter(p=>(p.chains||[]).includes('Solana')).sort((a,b)=>(b.tvl||0)-(a.tvl||0)).slice(0,15);
     setKPI('mc3v',fmtB(sol[0]?.tvl));document.getElementById('mc3c').textContent=sol[0]?.name||'';
-    drawBar('mc3',sol.map(p=>p.tvl||0),'#FFD700');
-    sol.forEach(p=>{document.querySelectorAll('[data-proto="'+p.slug+'"]').forEach(el=>el.textContent='TVL: '+fmtB(p.tvl));});
-  }catch(e){}
+    drawBar('mc3',sol.slice(0,10).map(p=>p.tvl||0),'#FFD700');
+    // Atualiza TVL por slug
+    sol.forEach(p=>{
+      const cardId = SLUG_MAP[p.slug];
+      if(cardId){
+        document.querySelectorAll('[data-proto="'+cardId+'"]').forEach(el=>el.textContent='TVL: '+fmtB(p.tvl));
+      }
+      // Também tenta pelo próprio slug
+      document.querySelectorAll('[data-proto="'+p.slug+'"]').forEach(el=>el.textContent='TVL: '+fmtB(p.tvl));
+    });
+  }catch(e){console.warn('fetchProtoTVL error',e);}
 }
 
 // ─── NETWORK STATS ───────────────────────────────────────
 async function fetchNetwork(){
+  const RPC = 'https://api.mainnet-beta.solana.com';
+  const post = (method, params=[]) => fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}).then(r=>r.json());
+
+  // TPS
   try{
-    const [rpc,hel]=await Promise.all([
-      fetch('https://api.mainnet-beta.solana.com',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getRecentPerformanceSamples',params:[1]})}),
-      fetch('https://mainnet.helius-rpc.com/?api-key=demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getEpochInfo'})})
-    ]);
-    const rD=await rpc.json();const hD=await hel.json();
-    const sample=rD.result?.[0];
-    if(sample){const tps=Math.round((sample.numNonVoteTransactions||0)/sample.samplePeriodSecs);setKPI('ns1v',tps.toLocaleString());}
-    const epoch=hD.result;
-    if(epoch){
-      setKPI('ns2v',epoch.absoluteSlot?.toLocaleString());
-      setKPI('ns3v',epoch.epoch?.toString());
-      const pct=((epoch.slotIndex/epoch.slotsInEpoch)*100).toFixed(1);
-      document.getElementById('ns3u').textContent=pct+'% done';
+    const d = await post('getRecentPerformanceSamples',[4]);
+    const samples = d.result || [];
+    if(samples.length){
+      const avg = samples.reduce((s,x)=>s+Math.round((x.numNonVoteTransactions||0)/x.samplePeriodSecs),0)/samples.length;
+      setKPI('ns1v', Math.round(avg).toLocaleString());
     }
   }catch(e){}
+
+  // Slot + Epoch
   try{
-    const r=await fetch('https://api.mainnet-beta.solana.com',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getVoteAccounts'})});
-    const d=await r.json();
-    const active=(d.result?.current||[]).length;setKPI('ns4v',active.toLocaleString());
+    const d = await post('getEpochInfo');
+    const ep = d.result;
+    if(ep){
+      setKPI('ns2v', ep.absoluteSlot?.toLocaleString());
+      setKPI('ns3v', ep.epoch?.toString());
+      const pct = ((ep.slotIndex / ep.slotsInEpoch)*100).toFixed(1);
+      document.getElementById('ns3u').textContent = pct+'% done';
+    }
   }catch(e){}
+
+  // Validators
   try{
-    const r=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-    const d=await r.json();
-    const solPrice=d.solana?.usd||0;
-    const feeInSol=0.000005;
-    const feeInUsd=(feeInSol*solPrice).toFixed(5);
+    const d = await post('getVoteAccounts');
+    const active = (d.result?.current||[]).length;
+    setKPI('ns4v', active.toLocaleString());
+  }catch(e){}
+
+  // Fee avg
+  try{
+    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+    const d = await r.json();
+    const solPrice = d.solana?.usd || 0;
+    const feeInUsd = (0.000005 * solPrice).toFixed(5);
     setKPI('ns5v','$'+feeInUsd);
   }catch(e){}
 }
@@ -842,19 +881,19 @@ function renderStaking() {
 
 // ─── PROTOCOLS ───────────────────────────────────────────
 const PROTOCOLS=[
-  {id:'jupiter',name:'Jupiter',cat:'dex',score:99,link:'https://jup.ag',logo:'https://station.jup.ag/favicon.ico',slug:'jupiter',tags:['Swap','Aggregator','Perps','DCA'],en:'The #1 DEX aggregator on Solana. Best prices across all liquidity sources with advanced routing, limit orders, DCA and perpetuals.',pt:'O principal agregador DEX da Solana. Melhores preços em todas as fontes de liquidez com roteamento avançado, ordens limitadas, DCA e perpétuos.'},
-  {id:'raydium',name:'Raydium',cat:'dex',score:97,link:'https://raydium.io',logo:'https://raydium.io/favicon.ico',slug:'raydium',tags:['AMM','CLMM','Liquidity','Launchpad'],en:'The leading AMM and liquidity provider on Solana. Powers a large portion of all Solana DEX volume with CLMM pools and AcceleRaytor launchpad.',pt:'O principal AMM e provedor de liquidez da Solana. Responsável por grande parte do volume DEX com pools CLMM e launchpad AcceleRaytor.'},
-  {id:'orca',name:'Orca',cat:'dex',score:93,link:'https://orca.so',logo:'https://www.orca.so/favicon.ico',slug:'orca',tags:['Whirlpools','CLMM','LPs'],en:'The most user-friendly DEX on Solana featuring Whirlpools — concentrated liquidity pools for maximum capital efficiency.',pt:'O DEX mais amigável da Solana com Whirlpools — pools de liquidez concentrada para máxima eficiência de capital.'},
+  {id:'jupiter',name:'Jupiter',cat:'dex',score:99,link:'https://jup.ag',logo:'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN/logo.png',slug:'jupiter',tags:['Swap','Aggregator','Perps','DCA'],en:'The #1 DEX aggregator on Solana. Best prices across all liquidity sources with advanced routing, limit orders, DCA and perpetuals.',pt:'O principal agregador DEX da Solana. Melhores preços em todas as fontes de liquidez com roteamento avançado, ordens limitadas, DCA e perpétuos.'},
+  {id:'raydium',name:'Raydium',cat:'dex',score:97,link:'https://raydium.io',logo:'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R/logo.png',slug:'raydium',tags:['AMM','CLMM','Liquidity','Launchpad'],en:'The leading AMM and liquidity provider on Solana. Powers a large portion of all Solana DEX volume with CLMM pools and AcceleRaytor launchpad.',pt:'O principal AMM e provedor de liquidez da Solana. Responsável por grande parte do volume DEX com pools CLMM e launchpad AcceleRaytor.'},
+  {id:'orca',name:'Orca',cat:'dex',score:93,link:'https://orca.so',logo:'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE/logo.png',slug:'orca',tags:['Whirlpools','CLMM','LPs'],en:'The most user-friendly DEX on Solana featuring Whirlpools — concentrated liquidity pools for maximum capital efficiency.',pt:'O DEX mais amigável da Solana com Whirlpools — pools de liquidez concentrada para máxima eficiência de capital.'},
   {id:'meteora',name:'Meteora',cat:'dex',score:89,link:'https://app.meteora.ag',logo:'https://app.meteora.ag/favicon.ico',slug:'meteora',tags:['Dynamic AMM','Stablecoins','Yield'],en:'Dynamic liquidity pools that automatically adjust fees and routing. Specializes in stablecoin efficiency and dynamic AMM vaults.',pt:'Pools de liquidez dinâmicos que ajustam taxas automaticamente. Especializado em eficiência de stablecoins e vaults AMM dinâmicos.'},
-  {id:'drift',name:'Drift',cat:'dex',score:91,link:'https://app.drift.trade',logo:'https://app.drift.trade/favicon.ico',slug:'drift-protocol',tags:['Perps','Spot','Lending','Vaults'],en:'The leading perpetuals and spot DEX on Solana. Trade with up to 10x leverage, earn yield, and access cross-collateral borrowing.',pt:'O principal DEX de perpétuos e spot da Solana. Opere com até 10x de alavancagem, ganhe yield e acesse empréstimos cross-colateral.'},
-  {id:'kamino',name:'Kamino',cat:'lending',score:96,link:'https://app.kamino.finance',logo:'https://app.kamino.finance/favicon.ico',slug:'kamino-lending',tags:['Lending','CLMM','Multiply','Points'],en:'The largest lending protocol on Solana. Automated liquidity vaults for CLMM positions plus a full money market for borrowing and lending.',pt:'O maior protocolo de lending da Solana. Vaults de liquidez automatizados para posições CLMM e mercado monetário completo.'},
+  {id:'drift',name:'Drift',cat:'dex',score:91,link:'https://app.drift.trade',logo:'https://app.drift.trade/favicon.ico',slug:'drift',tags:['Perps','Spot','Lending','Vaults'],en:'The leading perpetuals and spot DEX on Solana. Trade with up to 10x leverage, earn yield, and access cross-collateral borrowing.',pt:'O principal DEX de perpétuos e spot da Solana. Opere com até 10x de alavancagem, ganhe yield e acesse empréstimos cross-colateral.'},
+  {id:'kamino',name:'Kamino',cat:'lending',score:96,link:'https://app.kamino.finance',logo:'https://app.kamino.finance/favicon.ico',slug:'kamino',tags:['Lending','CLMM','Multiply','Points'],en:'The largest lending protocol on Solana. Automated liquidity vaults for CLMM positions plus a full money market for borrowing and lending.',pt:'O maior protocolo de lending da Solana. Vaults de liquidez automatizados para posições CLMM e mercado monetário completo.'},
   {id:'marginfi',name:'MarginFi',cat:'lending',score:92,link:'https://app.marginfi.com',logo:'https://app.marginfi.com/favicon.ico',slug:'marginfi',tags:['Lending','Cross-margin','Risk Engine'],en:'Cross-margined money market on Solana with a sophisticated risk engine. Borrow against multiple assets with shared collateral.',pt:'Mercado monetário com margem cruzada na Solana com motor de risco sofisticado. Tome emprestado contra múltiplos ativos com colateral compartilhado.'},
   {id:'solend',name:'Solend',cat:'lending',score:87,link:'https://solend.fi',logo:'https://solend.fi/favicon.ico',slug:'solend',tags:['Lending','Isolated pools','Flash loans'],en:'The original lending protocol on Solana. Supports isolated pools, flash loans and a wide range of collateral assets.',pt:'O protocolo de lending original da Solana. Suporta pools isolados, flash loans e ampla gama de ativos como colateral.'},
-  {id:'jito',name:'Jito',cat:'staking',score:98,link:'https://www.jito.network',logo:'https://www.jito.network/favicon.ico',slug:'jito',tags:['JitoSOL','MEV','Liquid Staking'],en:'The leading liquid staking protocol on Solana. Stake SOL for JitoSOL and earn both staking rewards and MEV-boosted yields.',pt:'O principal protocolo de liquid staking da Solana. Faça stake de SOL para JitoSOL e ganhe recompensas de staking + MEV.'},
-  {id:'marinade',name:'Marinade',cat:'staking',score:93,link:'https://marinade.finance',logo:'https://marinade.finance/favicon.ico',slug:'marinade-finance',tags:['mSOL','Native Stake','Governance'],en:'Pioneer liquid staking on Solana. Stake SOL for mSOL and use it across DeFi while earning staking rewards automatically.',pt:'Pioneiro em liquid staking na Solana. Faça stake de SOL para mSOL e use em DeFi enquanto ganha recompensas automaticamente.'},
+  {id:'jito',name:'Jito',cat:'staking',score:98,link:'https://www.jito.network',logo:'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn/logo.png',slug:'jito',tags:['JitoSOL','MEV','Liquid Staking'],en:'The leading liquid staking protocol on Solana. Stake SOL for JitoSOL and earn both staking rewards and MEV-boosted yields.',pt:'O principal protocolo de liquid staking da Solana. Faça stake de SOL para JitoSOL e ganhe recompensas de staking + MEV.'},
+  {id:'marinade',name:'Marinade',cat:'staking',score:93,link:'https://marinade.finance',logo:'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So/logo.png',slug:'marinade',tags:['mSOL','Native Stake','Governance'],en:'Pioneer liquid staking on Solana. Stake SOL for mSOL and use it across DeFi while earning staking rewards automatically.',pt:'Pioneiro em liquid staking na Solana. Faça stake de SOL para mSOL e use em DeFi enquanto ganha recompensas automaticamente.'},
   {id:'sanctum',name:'Sanctum',cat:'staking',score:88,link:'https://sanctum.so',logo:'https://sanctum.so/favicon.ico',slug:'sanctum',tags:['INF','LST Router','Infinity'],en:'The LST liquidity layer for Solana. Swap between any liquid staking tokens instantly and access the Infinity universal LST.',pt:'A camada de liquidez LST da Solana. Troque entre qualquer token de liquid staking instantaneamente e acesse o INF universal.'},
   {id:'tensor',name:'Tensor',cat:'nft',score:94,link:'https://tensor.trade',logo:'https://tensor.trade/favicon.ico',slug:'tensor',tags:['NFT','AMM','Rarity','Pro'],en:'The professional NFT trading platform on Solana. Advanced analytics, automated market making and real-time rarity data.',pt:'A plataforma profissional de NFT da Solana. Analytics avançado, AMM automatizado e dados de raridade em tempo real.'},
-  {id:'magiceden',name:'Magic Eden',cat:'nft',score:96,link:'https://magiceden.io',logo:'https://magiceden.io/favicon.ico',slug:'magiceden',tags:['NFT','Launchpad','Multi-chain'],en:'The largest NFT marketplace on Solana and beyond. Discover, buy, and sell NFTs with the deepest liquidity in the ecosystem.',pt:'O maior marketplace de NFTs da Solana e além. Descubra, compre e venda NFTs com a maior liquidez do ecossistema.'},
+  {id:'magiceden',name:'Magic Eden',cat:'nft',score:96,link:'https://magiceden.io',logo:'https://magiceden.io/favicon.ico',slug:'magic-eden',tags:['NFT','Launchpad','Multi-chain'],en:'The largest NFT marketplace on Solana and beyond. Discover, buy, and sell NFTs with the deepest liquidity in the ecosystem.',pt:'O maior marketplace de NFTs da Solana e além. Descubra, compre e venda NFTs com a maior liquidez do ecossistema.'},
   {id:'phantom',name:'Phantom',cat:'wallet',score:98,link:'https://phantom.app',logo:'https://phantom.app/favicon.ico',slug:'',tags:['Wallet','Multi-chain','Swap','NFT'],en:'The most popular wallet on Solana. Swap tokens, collect NFTs, connect to dApps and manage your portfolio — all in one place.',pt:'A carteira mais popular da Solana. Troque tokens, colete NFTs, conecte a dApps e gerencie seu portfólio — tudo em um lugar.'},
   {id:'backpack',name:'Backpack',cat:'wallet',score:91,link:'https://backpack.app',logo:'https://backpack.app/favicon.ico',slug:'',tags:['Wallet','xNFT','Exchange'],en:'Next-gen Solana wallet featuring xNFTs — executable NFTs that run apps directly inside your wallet.',pt:'Carteira de próxima geração com xNFTs — NFTs executáveis que rodam apps diretamente dentro da carteira.'},
   {id:'solflare',name:'Solflare',cat:'wallet',score:88,link:'https://solflare.com',logo:'https://solflare.com/favicon.ico',slug:'',tags:['Wallet','Hardware','Staking'],en:'The original Solana-native wallet. Full hardware wallet support, built-in staking and deep ecosystem integration.',pt:'A carteira original nativa da Solana. Suporte completo a hardware wallet, staking integrado e integração profunda com o ecossistema.'},
